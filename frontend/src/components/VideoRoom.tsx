@@ -45,30 +45,22 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
 
   // Helper function to stop all media tracks and cleanup
   const stopAllMediaTracks = () => {
-    console.log('stopAllMediaTracks called');
     
     if (localStream) {
-      console.log('Stopping local stream tracks:', localStream.getTracks().length);
       localStream.getTracks().forEach(track => {
-        console.log('Stopping track:', track.kind, track.id, 'enabled:', track.enabled);
         track.stop(); // This stops the track and releases the camera/mic
-        console.log('Track stopped:', track.kind, track.id);
       });
     }
     
     // Stop remote stream tracks
     if (remoteStream) {
-      console.log('Stopping remote stream tracks:', remoteStream.getTracks().length);
       remoteStream.getTracks().forEach(track => {
-        console.log('Stopping remote track:', track.kind, track.id);
         track.stop();
-        console.log('Remote track stopped:', track.kind, track.id);
       });
     }
     
     // Close peer connection
     if (peerConnectionRef.current) {
-      console.log('Closing peer connection');
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
     }
@@ -82,20 +74,15 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
     setIsMuted(false);
     setIsVideoOn(true);
     
-    console.log('All media tracks stopped and cleanup completed');
   };
 
   // Helper function to specifically handle remote stream cleanup
   const stopRemoteStream = () => {
-    console.log('stopRemoteStream called');
     
     if (remoteStream) {
-      console.log('Stopping remote stream tracks:', remoteStream.getTracks().length);
       remoteStream.getTracks().forEach(track => {
-        console.log('Stopping remote track:', track.kind, track.id, 'readyState:', track.readyState);
         if (track.readyState !== 'ended') {
           track.stop();
-          console.log('Remote track stopped:', track.kind, track.id);
         }
       });
     }
@@ -106,7 +93,6 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
     setRemoteMuted(false);
     setRemoteVideoOn(true);
     
-    console.log('Remote stream cleanup completed');
   };
 
   // Use refs to persist peer connection and streams
@@ -173,7 +159,6 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
     });
 
     socket.on('call-ended-by-host', () => {
-      console.log('Call ended by host - stopping all media tracks');
       
       // Stop all media tracks and cleanup
       stopAllMediaTracks();
@@ -181,7 +166,6 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
       // Force stop any remaining tracks
       if (localStream) {
         localStream.getTracks().forEach(track => {
-          console.log('Force stopping track:', track.kind, track.id);
           track.stop();
         });
       }
@@ -189,7 +173,6 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
       // Force stop remote stream tracks
       if (remoteStream) {
         remoteStream.getTracks().forEach(track => {
-          console.log('Force stopping remote track:', track.kind, track.id);
           track.stop();
         });
       }
@@ -205,7 +188,6 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
       
       // Close peer connection if it exists
       if (peerConnectionRef.current) {
-        console.log('Closing peer connection due to host ending call');
         peerConnectionRef.current.close();
         peerConnectionRef.current = null;
       }
@@ -213,20 +195,16 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
       // Additional cleanup with timeout to ensure tracks are stopped
       setTimeout(() => {
         if (localStream) {
-          console.log('Timeout cleanup - force stopping remaining local tracks');
           localStream.getTracks().forEach(track => {
             if (track.readyState !== 'ended') {
-              console.log('Force stopping local track in timeout:', track.kind, track.id);
               track.stop();
             }
           });
         }
         
         if (remoteStream) {
-          console.log('Timeout cleanup - force stopping remaining remote tracks');
           remoteStream.getTracks().forEach(track => {
             if (track.readyState !== 'ended') {
-              console.log('Force stopping remote track in timeout:', track.kind, track.id);
               track.stop();
             }
           });
@@ -258,9 +236,6 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
     })
       .then((stream) => {
         if (!isMounted) return;
-        console.log('Local stream obtained:', stream.getTracks().map(t => t.kind));
-        console.log('Video tracks:', stream.getVideoTracks().length);
-        console.log('Audio tracks:', stream.getAudioTracks().length);
         
         // Check if we actually have video tracks
         const videoTracks = stream.getVideoTracks();
@@ -283,7 +258,6 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
         peerConnectionRef.current = pc;
         // 3. Add local tracks
         stream.getTracks().forEach(track => {
-          console.log('Adding track to peer connection:', track.kind);
           pc.addTrack(track, stream);
         });
         // 4. ICE candidate handler
@@ -295,21 +269,17 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
 
         // Add connection state change logging
         pc.onconnectionstatechange = () => {
-          console.log('Connection state changed:', pc.connectionState);
           setConnectionState(pc.connectionState);
           
           // Handle disconnection
           if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
-            console.log('Peer connection disconnected/failed - stopping media tracks');
             setRemoteConnected(false);
             setRemoteStream(null);
             setRemoteMuted(false);
-            setRemoteVideoOn(true);
             
             // Stop local media tracks when connection is lost
             if (localStream) {
               localStream.getTracks().forEach(track => {
-                console.log('Stopping track due to connection loss:', track.kind);
                 track.stop();
               });
               setLocalStream(null);
@@ -324,19 +294,16 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
         };
 
         pc.oniceconnectionstatechange = () => {
-          console.log('ICE connection state changed:', pc.iceConnectionState);
           setIceConnectionState(pc.iceConnectionState);
           
           // Handle ICE disconnection
           if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
-            console.log('ICE connection disconnected/failed - stopping media tracks');
             setRemoteConnected(false);
             setRemoteStream(null);
             
             // Stop local media tracks when ICE connection is lost
             if (localStream) {
               localStream.getTracks().forEach(track => {
-                console.log('Stopping track due to ICE connection loss:', track.kind);
                 track.stop();
               });
               setLocalStream(null);
@@ -351,20 +318,17 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
         };
 
         pc.onsignalingstatechange = () => {
-          console.log('Signaling state changed:', pc.signalingState);
           setSignalingState(pc.signalingState);
         };
         // 5. Remote track handler
         const remoteStreamObj = new MediaStream();
         setRemoteStream(remoteStreamObj);
         pc.ontrack = (event) => {
-          console.log('Remote track received:', event.track.kind);
           event.streams[0].getTracks().forEach(track => {
             remoteStreamObj.addTrack(track);
             
             // Handle track ended event
             track.onended = () => {
-              console.log('Remote track ended:', track.kind);
               if (track.kind === 'video') {
                 setRemoteVideoOn(false);
               } else if (track.kind === 'audio') {
@@ -492,27 +456,12 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
     });
 
     socket.on("peer-disconnected", () => {
-      console.log('Peer disconnected - stopping remote stream');
-      
-      // Stop remote stream tracks
-      if (remoteStream) {
-        remoteStream.getTracks().forEach(track => {
-          console.log('Stopping remote track due to peer disconnect:', track.kind, track.id);
-          track.stop();
-        });
-      }
-      
-      setRemoteConnected(false);
-      setRemoteStream(null); // Clear the remote stream
-      setRemoteMuted(false); // Reset remote user states
-      setRemoteVideoOn(true);
-      
+      stopRemoteStream();
       // Close the peer connection
       if (peerConnectionRef.current) {
         peerConnectionRef.current.close();
         peerConnectionRef.current = null;
       }
-      
       toast({
         title: "User left",
         description: "The other person left the call",
@@ -522,7 +471,6 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
 
     return () => {
       isMounted = false;
-      console.log('Component unmounting - cleaning up all resources');
       
       socket.emit("leave-room", roomId);
       socket.disconnect();
@@ -543,7 +491,6 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
       // Force stop any remaining tracks
       if (localStream) {
         localStream.getTracks().forEach(track => {
-          console.log('Force stopping track on unmount:', track.kind, track.id);
           track.stop();
         });
       }
@@ -551,12 +498,13 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
       // Force stop remote stream tracks
       if (remoteStream) {
         remoteStream.getTracks().forEach(track => {
-          console.log('Force stopping remote track on unmount:', track.kind, track.id);
           track.stop();
         });
       }
       
-      console.log('Component cleanup completed');
+      // Additional remote stream cleanup
+      stopRemoteStream();
+      
     };
   }, [roomId]);
 
@@ -571,7 +519,6 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
   const endCallForEveryone = () => {
     if (!isHost) return;
     
-    console.log('Host ending call for everyone');
     
     // Stop all media tracks and cleanup
     stopAllMediaTracks();
@@ -579,7 +526,6 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
     // Force stop any remaining tracks immediately
     if (localStream) {
       localStream.getTracks().forEach(track => {
-        console.log('Host force stopping track:', track.kind, track.id);
         track.stop();
       });
     }
@@ -587,7 +533,6 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
     // Force stop remote stream tracks
     if (remoteStream) {
       remoteStream.getTracks().forEach(track => {
-        console.log('Host force stopping remote track:', track.kind, track.id);
         track.stop();
       });
     }
@@ -603,7 +548,6 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
     
     // Close peer connection if it exists
     if (peerConnectionRef.current) {
-      console.log('Host closing peer connection');
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
     }
