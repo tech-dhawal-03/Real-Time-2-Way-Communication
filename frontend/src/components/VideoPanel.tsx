@@ -97,61 +97,61 @@ export const VideoPanel = ({
           // fallback if video is on but no stream
           <div className="w-full h-full flex items-center justify-center text-muted-foreground">
             <div className="text-center">
-              <User className="w-16 h-16 mb-4 opacity-60 mx-auto" />
-              <span className="text-lg font-medium">
+              <User className="w-12 h-12 sm:w-16 sm:h-16 mb-4 opacity-60 mx-auto" />
+              <span className="text-base sm:text-lg font-medium">
                 {isLocal ? "Camera not available" : "User left the call"}
               </span>
-              <span className="text-sm opacity-70 block mt-2">
+              <span className="text-xs sm:text-sm opacity-70 block mt-2">
                 {isLocal ? "Please check camera permissions" : "Waiting for others to join..."}
               </span>
             </div>
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center text-muted-foreground h-full bg-gradient-to-br from-muted/30 to-background/50">
-            <VideoOff className="w-16 h-16 mb-4 opacity-60" />
-            <span className="text-lg font-medium">Camera off</span>
-            <span className="text-sm opacity-70">Video is disabled</span>
+            <VideoOff className="w-12 h-12 sm:w-16 sm:h-16 mb-4 opacity-60" />
+            <span className="text-base sm:text-lg font-medium">Camera off</span>
+            <span className="text-xs sm:text-sm opacity-70">Video is disabled</span>
           </div>
         )}
       </div>
 
       {/* User Info Overlay */}
-      <div className="absolute bottom-4 left-4 flex items-center gap-3 animate-fade-in">
-        <div className="glass-morphism px-3 py-2 rounded-xl backdrop-blur-md">
-          <span className="text-white font-medium text-sm">{userName}</span>
+      <div className="absolute bottom-2 sm:bottom-4 left-2 sm:left-4 flex items-center gap-2 sm:gap-3 animate-fade-in">
+        <div className="glass-morphism px-2 py-1 sm:px-3 sm:py-2 rounded-xl backdrop-blur-md">
+          <span className="text-white font-medium text-xs sm:text-sm">{userName}</span>
         </div>
         
         {/* Status Indicators */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2">
           {isMuted ? (
-            <div className="w-8 h-8 rounded-full bg-destructive/90 backdrop-blur-sm flex items-center justify-center shadow-soft hover-glow">
-              <MicOff className="w-4 h-4 text-destructive-foreground" />
+            <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-destructive/90 backdrop-blur-sm flex items-center justify-center shadow-soft hover-glow">
+              <MicOff className="w-3 h-3 sm:w-4 sm:h-4 text-destructive-foreground" />
             </div>
           ) : (
-            <div className="w-8 h-8 rounded-full bg-status-online/90 backdrop-blur-sm flex items-center justify-center animate-pulse-glow">
-              <Mic className="w-4 h-4 text-white" />
+            <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-status-online/90 backdrop-blur-sm flex items-center justify-center animate-pulse-glow">
+              <Mic className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
             </div>
           )}
           
           {isVideoOn && (
-            <div className="w-8 h-8 rounded-full bg-primary/90 backdrop-blur-sm flex items-center justify-center shadow-soft hover-glow">
-              <Video className="w-4 h-4 text-primary-foreground" />
+            <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-primary/90 backdrop-blur-sm flex items-center justify-center shadow-soft hover-glow">
+              <Video className="w-3 h-3 sm:w-4 sm:h-4 text-primary-foreground" />
             </div>
           )}
         </div>
       </div>
 
       {/* Connection Status */}
-      <div className="absolute top-4 right-4 animate-fade-in">
-        <div className={`w-4 h-4 rounded-full shadow-glow ${isConnected ? 'bg-status-online animate-pulse-glow' : 'bg-status-offline opacity-60'}`} />
+      <div className="absolute top-2 sm:top-4 right-2 sm:right-4 animate-fade-in">
+        <div className={`w-3 h-3 sm:w-4 sm:h-4 rounded-full shadow-glow ${isConnected ? 'bg-status-online animate-pulse-glow' : 'bg-status-offline opacity-60'}`} />
       </div>
 
       {/* Disconnected Overlay */}
       {!isLocal && !isConnected && (
         <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-3xl">
           <div className="text-center text-white">
-            <User className="w-12 h-12 mb-2 opacity-60 mx-auto" />
-            <p className="text-sm font-medium">User disconnected</p>
+            <User className="w-8 h-8 sm:w-12 sm:h-12 mb-2 opacity-60 mx-auto" />
+            <p className="text-xs sm:text-sm font-medium">User disconnected</p>
           </div>
         </div>
       )}
@@ -160,8 +160,8 @@ export const VideoPanel = ({
       {isLocal && !mediaStream && (
         <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-3xl">
           <div className="text-center text-white">
-            <VideoOff className="w-12 h-12 mb-2 opacity-60 mx-auto" />
-            <p className="text-sm font-medium">Camera disabled</p>
+            <VideoOff className="w-8 h-8 sm:w-12 sm:h-12 mb-2 opacity-60 mx-auto" />
+            <p className="text-xs sm:text-sm font-medium">Camera disabled</p>
             <p className="text-xs opacity-70 mt-1">Permissions have been released</p>
           </div>
         </div>

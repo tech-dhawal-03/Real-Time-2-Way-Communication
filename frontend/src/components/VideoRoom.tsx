@@ -45,15 +45,30 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
 
   // Helper function to stop all media tracks and cleanup
   const stopAllMediaTracks = () => {
+    console.log('stopAllMediaTracks called');
+    
     if (localStream) {
+      console.log('Stopping local stream tracks:', localStream.getTracks().length);
       localStream.getTracks().forEach(track => {
+        console.log('Stopping track:', track.kind, track.id, 'enabled:', track.enabled);
         track.stop(); // This stops the track and releases the camera/mic
-        console.log('Stopped track:', track.kind);
+        console.log('Track stopped:', track.kind, track.id);
+      });
+    }
+    
+    // Stop remote stream tracks
+    if (remoteStream) {
+      console.log('Stopping remote stream tracks:', remoteStream.getTracks().length);
+      remoteStream.getTracks().forEach(track => {
+        console.log('Stopping remote track:', track.kind, track.id);
+        track.stop();
+        console.log('Remote track stopped:', track.kind, track.id);
       });
     }
     
     // Close peer connection
     if (peerConnectionRef.current) {
+      console.log('Closing peer connection');
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
     }
@@ -66,6 +81,32 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
     setRemoteVideoOn(true);
     setIsMuted(false);
     setIsVideoOn(true);
+    
+    console.log('All media tracks stopped and cleanup completed');
+  };
+
+  // Helper function to specifically handle remote stream cleanup
+  const stopRemoteStream = () => {
+    console.log('stopRemoteStream called');
+    
+    if (remoteStream) {
+      console.log('Stopping remote stream tracks:', remoteStream.getTracks().length);
+      remoteStream.getTracks().forEach(track => {
+        console.log('Stopping remote track:', track.kind, track.id, 'readyState:', track.readyState);
+        if (track.readyState !== 'ended') {
+          track.stop();
+          console.log('Remote track stopped:', track.kind, track.id);
+        }
+      });
+    }
+    
+    // Clear remote stream state
+    setRemoteStream(null);
+    setRemoteConnected(false);
+    setRemoteMuted(false);
+    setRemoteVideoOn(true);
+    
+    console.log('Remote stream cleanup completed');
   };
 
   // Use refs to persist peer connection and streams
@@ -132,8 +173,65 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
     });
 
     socket.on('call-ended-by-host', () => {
+      console.log('Call ended by host - stopping all media tracks');
+      
       // Stop all media tracks and cleanup
       stopAllMediaTracks();
+      
+      // Force stop any remaining tracks
+      if (localStream) {
+        localStream.getTracks().forEach(track => {
+          console.log('Force stopping track:', track.kind, track.id);
+          track.stop();
+        });
+      }
+      
+      // Force stop remote stream tracks
+      if (remoteStream) {
+        remoteStream.getTracks().forEach(track => {
+          console.log('Force stopping remote track:', track.kind, track.id);
+          track.stop();
+        });
+      }
+      
+      // Clear all state immediately
+      setLocalStream(null);
+      setRemoteStream(null);
+      setRemoteConnected(false);
+      setRemoteMuted(false);
+      setRemoteVideoOn(true);
+      setIsMuted(false);
+      setIsVideoOn(true);
+      
+      // Close peer connection if it exists
+      if (peerConnectionRef.current) {
+        console.log('Closing peer connection due to host ending call');
+        peerConnectionRef.current.close();
+        peerConnectionRef.current = null;
+      }
+      
+      // Additional cleanup with timeout to ensure tracks are stopped
+      setTimeout(() => {
+        if (localStream) {
+          console.log('Timeout cleanup - force stopping remaining local tracks');
+          localStream.getTracks().forEach(track => {
+            if (track.readyState !== 'ended') {
+              console.log('Force stopping local track in timeout:', track.kind, track.id);
+              track.stop();
+            }
+          });
+        }
+        
+        if (remoteStream) {
+          console.log('Timeout cleanup - force stopping remaining remote tracks');
+          remoteStream.getTracks().forEach(track => {
+            if (track.readyState !== 'ended') {
+              console.log('Force stopping remote track in timeout:', track.kind, track.id);
+              track.stop();
+            }
+          });
+        }
+      }, 1000);
       
       toast({
         title: "Call ended",
@@ -202,10 +300,20 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
           
           // Handle disconnection
           if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+            console.log('Peer connection disconnected/failed - stopping media tracks');
             setRemoteConnected(false);
             setRemoteStream(null);
             setRemoteMuted(false);
             setRemoteVideoOn(true);
+            
+            // Stop local media tracks when connection is lost
+            if (localStream) {
+              localStream.getTracks().forEach(track => {
+                console.log('Stopping track due to connection loss:', track.kind);
+                track.stop();
+              });
+              setLocalStream(null);
+            }
             
             toast({
               title: "Connection lost",
@@ -221,8 +329,18 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
           
           // Handle ICE disconnection
           if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+            console.log('ICE connection disconnected/failed - stopping media tracks');
             setRemoteConnected(false);
             setRemoteStream(null);
+            
+            // Stop local media tracks when ICE connection is lost
+            if (localStream) {
+              localStream.getTracks().forEach(track => {
+                console.log('Stopping track due to ICE connection loss:', track.kind);
+                track.stop();
+              });
+              setLocalStream(null);
+            }
             
             toast({
               title: "Network connection lost",
@@ -374,6 +492,16 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
     });
 
     socket.on("peer-disconnected", () => {
+      console.log('Peer disconnected - stopping remote stream');
+      
+      // Stop remote stream tracks
+      if (remoteStream) {
+        remoteStream.getTracks().forEach(track => {
+          console.log('Stopping remote track due to peer disconnect:', track.kind, track.id);
+          track.stop();
+        });
+      }
+      
       setRemoteConnected(false);
       setRemoteStream(null); // Clear the remote stream
       setRemoteMuted(false); // Reset remote user states
@@ -394,6 +522,8 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
 
     return () => {
       isMounted = false;
+      console.log('Component unmounting - cleaning up all resources');
+      
       socket.emit("leave-room", roomId);
       socket.disconnect();
       socket.off("init-offer");
@@ -409,6 +539,24 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
       
       // Stop all media tracks and cleanup
       stopAllMediaTracks();
+      
+      // Force stop any remaining tracks
+      if (localStream) {
+        localStream.getTracks().forEach(track => {
+          console.log('Force stopping track on unmount:', track.kind, track.id);
+          track.stop();
+        });
+      }
+      
+      // Force stop remote stream tracks
+      if (remoteStream) {
+        remoteStream.getTracks().forEach(track => {
+          console.log('Force stopping remote track on unmount:', track.kind, track.id);
+          track.stop();
+        });
+      }
+      
+      console.log('Component cleanup completed');
     };
   }, [roomId]);
 
@@ -423,8 +571,42 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
   const endCallForEveryone = () => {
     if (!isHost) return;
     
+    console.log('Host ending call for everyone');
+    
     // Stop all media tracks and cleanup
     stopAllMediaTracks();
+    
+    // Force stop any remaining tracks immediately
+    if (localStream) {
+      localStream.getTracks().forEach(track => {
+        console.log('Host force stopping track:', track.kind, track.id);
+        track.stop();
+      });
+    }
+    
+    // Force stop remote stream tracks
+    if (remoteStream) {
+      remoteStream.getTracks().forEach(track => {
+        console.log('Host force stopping remote track:', track.kind, track.id);
+        track.stop();
+      });
+    }
+    
+    // Clear all state immediately
+    setLocalStream(null);
+    setRemoteStream(null);
+    setRemoteConnected(false);
+    setRemoteMuted(false);
+    setRemoteVideoOn(true);
+    setIsMuted(false);
+    setIsVideoOn(true);
+    
+    // Close peer connection if it exists
+    if (peerConnectionRef.current) {
+      console.log('Host closing peer connection');
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
+    }
     
     toast({
       title: "Ending call",
@@ -514,69 +696,79 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
   const connectionStatus = getConnectionStatus();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-gray-800 relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-gray-800 relative overflow-hidden mobile-safe-area">
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-fuchsia-800/40 bg-gradient-glass backdrop-blur-xl supports-[backdrop-filter]:bg-gray-900/60">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+        <div className="container mx-auto px-4 py-3 sm:py-4 flex items-center justify-between">
+          <div className="flex items-center gap-2 sm:gap-4">
             <Button 
               variant="glass" 
               size="icon"
               onClick={handleLeaveRoom}
-              className="hover-glow"
+              className="hover-glow w-8 h-8 sm:w-10 sm:h-10 mobile-touch-target"
             >
-              <ArrowLeft className="w-5 h-5 text-fuchsia-400" />
+              <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-fuchsia-400" />
             </Button>
             
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 via-fuchsia-600 to-indigo-900 rounded-2xl flex items-center justify-center shadow-glow animate-pulse-glow">
-                <Video className="w-5 h-5 text-white" />
+            <div className="flex items-center gap-2 sm:gap-4">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-indigo-600 via-fuchsia-600 to-indigo-900 rounded-2xl flex items-center justify-center shadow-glow animate-pulse-glow">
+                <Video className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
               </div>
-              <div>
+              <div className="hidden sm:block">
                 <h1 className="font-bold text-lg text-white">Echo Meet Room</h1>
                 <p className="text-sm text-gray-300">Room: <span className="font-mono font-semibold text-fuchsia-400">{roomId}</span></p>
+              </div>
+              <div className="sm:hidden">
+                <h1 className="font-bold text-sm text-white">Echo Meet</h1>
+                <p className="text-xs text-gray-300">Room: <span className="font-mono font-semibold text-fuchsia-400">{roomId.substring(0, 8)}...</span></p>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             <Badge 
               variant={connectionState === "connected" ? "default" : "secondary"}
-              className={`${connectionStatus.color} shadow-glow animate-fade-in`}
+              className={`${connectionStatus.color} shadow-glow animate-fade-in text-xs px-2 py-1 sm:text-sm sm:px-3 sm:py-1`}
             >
-              <div className={`w-2 h-2 rounded-full ${connectionStatus.pulse ? 'animate-pulse' : ''} mr-2`} />
-              {connectionStatus.text}
+              <div className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${connectionStatus.pulse ? 'animate-pulse' : ''} mr-1 sm:mr-2`} />
+              <span className="hidden sm:inline">{connectionStatus.text}</span>
+              <span className="sm:hidden">
+                {connectionState === "connected" ? "Connected" : 
+                 connectionState === "connecting" ? "Connecting" : 
+                 connectionState === "failed" ? "Failed" : "Init"}
+              </span>
             </Badge>
             
             <Button 
               variant="glass" 
               size="sm"
               onClick={copyRoomId}
-              className="gap-2 hover-glow text-fuchsia-400 border-fuchsia-800/40"
+              className="gap-1 sm:gap-2 hover-glow text-fuchsia-400 border-fuchsia-800/40 text-xs sm:text-sm px-2 py-1 sm:px-3 sm:py-2 mobile-touch-target"
             >
-              <Copy className="w-4 h-4" />
-              Share Room
+              <Copy className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">Share Room</span>
+              <span className="sm:hidden">Share</span>
             </Button>
           </div>
         </div>
       </header>
 
       {/* Main Video Area */}
-      <main className="container mx-auto px-6 py-12">
+      <main className="container mx-auto px-4 sm:px-6 py-6 sm:py-12">
         {/* Floating Background Elements */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-32 left-16 w-64 h-64 bg-indigo-700/30 rounded-full blur-2xl animate-float" />
-          <div className="absolute bottom-32 right-16 w-80 h-80 bg-fuchsia-700/30 rounded-full blur-2xl animate-float-delayed" />
+          <div className="absolute top-16 sm:top-32 left-8 sm:left-16 w-32 h-32 sm:w-64 sm:h-64 bg-indigo-700/30 rounded-full blur-2xl animate-float" />
+          <div className="absolute bottom-16 sm:bottom-32 right-8 sm:right-16 w-40 h-40 sm:w-80 sm:h-80 bg-fuchsia-700/30 rounded-full blur-2xl animate-float-delayed" />
         </div>
 
-        <div className="grid lg:grid-cols-2 gap-8 max-w-7xl mx-auto relative z-10">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8 max-w-7xl mx-auto relative z-10">
           {/* Local Video */}
-          <div className="space-y-6 animate-fade-in">
-            <div className="flex items-center gap-3">
-              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-600 via-fuchsia-600 to-indigo-900 flex items-center justify-center">
-                <Users className="w-3 h-3 text-white" />
+          <div className="space-y-3 sm:space-y-6 animate-fade-in">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-gradient-to-br from-indigo-600 via-fuchsia-600 to-indigo-900 flex items-center justify-center">
+                <Users className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" />
               </div>
-              <h2 className="text-xl font-bold text-white">Your Video</h2>
+              <h2 className="text-lg sm:text-xl font-bold text-white">Your Video</h2>
               <div className="flex-1 h-px bg-gradient-to-r from-fuchsia-400/50 to-transparent" />
             </div>
             <VideoPanel
@@ -590,12 +782,12 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
           </div>
 
           {/* Remote Video */}
-          <div className="space-y-6 animate-fade-in" style={{ animationDelay: '0.2s' }}>
-            <div className="flex items-center gap-3">
-              <div className="w-6 h-6 rounded-full bg-gradient-to-r from-fuchsia-600 to-indigo-600 flex items-center justify-center">
-                <Users className="w-3 h-3 text-white" />
+          <div className="space-y-3 sm:space-y-6 animate-fade-in" style={{ animationDelay: '0.2s' }}>
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-gradient-to-r from-fuchsia-600 to-indigo-600 flex items-center justify-center">
+                <Users className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" />
               </div>
-              <h2 className="text-xl font-bold text-white">Remote User</h2>
+              <h2 className="text-lg sm:text-xl font-bold text-white">Remote User</h2>
               <div className="flex-1 h-px bg-gradient-to-r from-fuchsia-400/50 to-transparent" />
             </div>
             <VideoPanel
@@ -612,64 +804,64 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
         </div>
 
         {/* Enhanced Controls */}
-        <div className="mt-12 max-w-3xl mx-auto animate-fade-in" style={{ animationDelay: '0.5s' }}>
+        <div className="mt-8 sm:mt-12 max-w-3xl mx-auto animate-fade-in" style={{ animationDelay: '0.5s' }}>
           <Card className="bg-gray-900/95 shadow-2xl border-fuchsia-800/40 hover-lift">
-            <CardContent className="p-8">
-              <div className="flex items-center justify-center gap-6">
+            <CardContent className="p-4 sm:p-8">
+              <div className="flex items-center justify-center gap-3 sm:gap-6">
               <Button
                 variant={isMuted ? "destructive" : "glass"}
                 size="lg"
                 onClick={toggleMute}
-                className="w-16 h-16 rounded-2xl shadow-soft hover-glow text-white"
+                className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl shadow-soft hover-glow text-white mobile-touch-target"
               >
-                {isMuted ? <MicOff className="w-7 h-7" /> : <Mic className="w-7 h-7" />}
+                {isMuted ? <MicOff className="w-5 h-5 sm:w-7 sm:h-7" /> : <Mic className="w-5 h-5 sm:w-7 sm:h-7" />}
               </Button>
 
               <Button
                 variant={isVideoOn ? "glass" : "destructive"}
                 size="lg"
                 onClick={toggleVideo}
-                className="w-16 h-16 rounded-2xl shadow-soft hover-glow text-white"
+                className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl shadow-soft hover-glow text-white mobile-touch-target"
               >
-                {isVideoOn ? <Video className="w-7 h-7" /> : <VideoOff className="w-7 h-7" />}
+                {isVideoOn ? <Video className="w-5 h-5 sm:w-7 sm:h-7" /> : <VideoOff className="w-5 h-5 sm:w-7 sm:h-7" />}
               </Button>
 
               <Button
                 variant="glass"
                 size="lg"
-                className="w-16 h-16 rounded-2xl shadow-soft hover-glow text-white"
+                className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl shadow-soft hover-glow text-white mobile-touch-target"
               >
-                <Settings className="w-7 h-7" />
+                <Settings className="w-5 h-5 sm:w-7 sm:h-7" />
               </Button>
 
               <Button
                 variant={soundEnabled ? "glass" : "destructive"}
                 size="lg"
                 onClick={toggleSound}
-                className="w-16 h-16 rounded-2xl shadow-soft hover-glow text-white"
+                className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl shadow-soft hover-glow text-white mobile-touch-target"
               >
-                {soundEnabled ? <Volume2 className="w-7 h-7" /> : <VolumeX className="w-7 h-7" />}
+                {soundEnabled ? <Volume2 className="w-5 h-5 sm:w-7 sm:h-7" /> : <VolumeX className="w-5 h-5 sm:w-7 sm:h-7" />}
               </Button>
 
               <Button
                 variant="destructive"
                 size="lg"
                 onClick={handleLeaveRoom}
-                className="w-16 h-16 rounded-2xl bg-fuchsia-700 hover:bg-fuchsia-800 shadow-premium hover:shadow-glow text-white"
+                className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl bg-fuchsia-700 hover:bg-fuchsia-800 shadow-premium hover:shadow-glow text-white mobile-touch-target"
               >
-                <PhoneOff className="w-7 h-7" />
+                <PhoneOff className="w-5 h-5 sm:w-7 sm:h-7" />
               </Button>
             </div>
             
-            <div className="text-center mt-6 space-y-2">
-              <p className="text-lg font-medium text-gray-200">
+            <div className="text-center mt-4 sm:mt-6 space-y-2">
+              <p className="text-base sm:text-lg font-medium text-gray-200">
                 {remoteConnected ? "Video call in progress" : "Waiting for others to join..."}
               </p>
               
               {/* Connection Status Details */}
-              <div className="flex items-center justify-center gap-4 mt-4 text-sm">
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 mt-4 text-xs sm:text-sm">
                 <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${
+                  <div className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${
                     connectionState === "connected" ? "bg-green-500" :
                     connectionState === "connecting" ? "bg-yellow-500" :
                     connectionState === "failed" ? "bg-red-500" :
@@ -679,7 +871,7 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
                 </div>
                 
                 <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${
+                  <div className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${
                     iceConnectionState === "connected" ? "bg-green-500" :
                     iceConnectionState === "checking" ? "bg-blue-500" :
                     iceConnectionState === "failed" ? "bg-red-500" :
@@ -689,7 +881,7 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
                 </div>
                 
                 <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${
+                  <div className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${
                     signalingState === "stable" ? "bg-green-500" :
                     signalingState.includes("offer") ? "bg-purple-500" :
                     "bg-gray-500"
@@ -699,8 +891,8 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
               </div>
               
               {!remoteConnected && (
-                <div className="flex items-center justify-center gap-2 text-sm text-fuchsia-400">
-                  <div className="w-2 h-2 rounded-full bg-fuchsia-400 animate-pulse" />
+                <div className="flex items-center justify-center gap-2 text-xs sm:text-sm text-fuchsia-400">
+                  <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-fuchsia-400 animate-pulse" />
                   <span>Share the room ID to invite others</span>
                 </div>
               )}
@@ -710,7 +902,7 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
                     variant="destructive"
                     size="sm"
                     onClick={endCallForEveryone}
-                    className="bg-red-600 hover:bg-red-700 text-white"
+                    className="bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm px-3 py-1 sm:px-4 sm:py-2"
                   >
                     End Call for Everyone
                   </Button>
