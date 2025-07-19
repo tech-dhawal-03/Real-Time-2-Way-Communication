@@ -26,10 +26,56 @@ export const VideoPanel = ({
   const videoRef = React.useRef<HTMLVideoElement>(null);
 
   React.useEffect(() => {
-    if (videoRef.current && mediaStream && isVideoOn) {
-      videoRef.current.srcObject = mediaStream;
+    const videoElement = videoRef.current;
+    if (!videoElement) return;
+
+    console.log('VideoPanel effect - isLocal:', isLocal, 'mediaStream:', !!mediaStream, 'isVideoOn:', isVideoOn);
+
+    if (mediaStream && isVideoOn) {
+      console.log('Setting video stream for', isLocal ? 'local' : 'remote', 'video');
+      
+      // Clear any existing stream first
+      videoElement.srcObject = null;
+      
+      // Set the new stream
+      videoElement.srcObject = mediaStream;
+      
+      // Ensure video plays when stream is set
+      const playVideo = async () => {
+        try {
+          await videoElement.play();
+          console.log('Video playing successfully for', isLocal ? 'local' : 'remote');
+        } catch (error) {
+          console.error('Error playing video:', error);
+        }
+      };
+      
+      // Handle video loading
+      const handleLoadedMetadata = () => {
+        console.log('Video metadata loaded for', isLocal ? 'local' : 'remote', 'video');
+        playVideo();
+      };
+      
+      const handleCanPlay = () => {
+        console.log('Video can play for', isLocal ? 'local' : 'remote', 'video');
+        playVideo();
+      };
+      
+      videoElement.addEventListener('loadedmetadata', handleLoadedMetadata);
+      videoElement.addEventListener('canplay', handleCanPlay);
+      
+      // Try to play immediately
+      playVideo();
+      
+      return () => {
+        videoElement.removeEventListener('loadedmetadata', handleLoadedMetadata);
+        videoElement.removeEventListener('canplay', handleCanPlay);
+      };
+    } else {
+      console.log('Clearing video stream for', isLocal ? 'local' : 'remote', 'video');
+      videoElement.srcObject = null;
     }
-  }, [mediaStream, isVideoOn]);
+  }, [mediaStream, isVideoOn, isLocal]);
 
   return (
     <div className={`relative aspect-video bg-gradient-to-br from-gray-900 via-black to-gray-800 rounded-3xl overflow-hidden shadow-premium hover-lift group ${className}`} style={style}>
@@ -42,11 +88,23 @@ export const VideoPanel = ({
             playsInline
             muted={isLocal}
             className="w-full h-full object-cover rounded-3xl"
+            onError={(e) => console.error('Video error:', e)}
+            onLoadStart={() => console.log('Video load started for', isLocal ? 'local' : 'remote')}
+            onLoadedData={() => console.log('Video data loaded for', isLocal ? 'local' : 'remote')}
+            style={{ transform: isLocal ? 'scaleX(-1)' : 'none' }}
           />
         ) : isVideoOn ? (
           // fallback if video is on but no stream
           <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-            <span className="text-lg">No video stream</span>
+            <div className="text-center">
+              <User className="w-16 h-16 mb-4 opacity-60 mx-auto" />
+              <span className="text-lg font-medium">
+                {isLocal ? "Camera not available" : "User left the call"}
+              </span>
+              <span className="text-sm opacity-70 block mt-2">
+                {isLocal ? "Please check camera permissions" : "Waiting for others to join..."}
+              </span>
+            </div>
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center text-muted-foreground h-full bg-gradient-to-br from-muted/30 to-background/50">
@@ -87,6 +145,27 @@ export const VideoPanel = ({
       <div className="absolute top-4 right-4 animate-fade-in">
         <div className={`w-4 h-4 rounded-full shadow-glow ${isConnected ? 'bg-status-online animate-pulse-glow' : 'bg-status-offline opacity-60'}`} />
       </div>
+
+      {/* Disconnected Overlay */}
+      {!isLocal && !isConnected && (
+        <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-3xl">
+          <div className="text-center text-white">
+            <User className="w-12 h-12 mb-2 opacity-60 mx-auto" />
+            <p className="text-sm font-medium">User disconnected</p>
+          </div>
+        </div>
+      )}
+
+      {/* Camera/Mic Disabled Overlay */}
+      {isLocal && !mediaStream && (
+        <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-3xl">
+          <div className="text-center text-white">
+            <VideoOff className="w-12 h-12 mb-2 opacity-60 mx-auto" />
+            <p className="text-sm font-medium">Camera disabled</p>
+            <p className="text-xs opacity-70 mt-1">Permissions have been released</p>
+          </div>
+        </div>
+      )}
 
       {/* Hover Overlay */}
       <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300 rounded-3xl" />

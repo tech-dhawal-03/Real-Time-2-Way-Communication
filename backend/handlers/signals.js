@@ -2,13 +2,11 @@ import { Room } from "../models/Room.js";
 export const handleSignals = async(socket, io) => {
     socket.on('join-room', async(roomId) => {
         socket.join(roomId);
-        console.log(`Socket ${socket.id} joined room: ${roomId}`);
 
         //register roomID in database 
         const existingRoom = await Room.findOne({
             roomId : roomId
         })
-
 
         if(!existingRoom) 
         {
@@ -16,7 +14,6 @@ export const handleSignals = async(socket, io) => {
             socket.emit('room-created',roomId);
         }
 
-        
         // Notify other users in the room
         socket.to(roomId).emit('user-joined', socket.id);
     });
@@ -30,7 +27,6 @@ export const handleSignals = async(socket, io) => {
                 socket.emit('room-not-found');
             }
         } catch (error) {
-            console.error('Error validating room:', error);
             socket.emit('room-not-found');
         }
     });
@@ -74,18 +70,17 @@ export const handleSignals = async(socket, io) => {
         const deletedRoom = await Room.findOneAndDelete({roomId});
 
         if(deletedRoom)
-            {
-                console.log(`Call ended by host in room: ${roomId}`);
-            }
+        {
+            // Room deleted successfully
+        }
     });
 
     socket.on('leave-room', (roomId) => {
         socket.leave(roomId);
         socket.to(roomId).emit('peer-disconnected');
-        console.log(`Socket ${socket.id} left room: ${roomId}`);
     });
 
     socket.on('disconnect', () => {
-        console.log(`❌ User disconnected: ${socket.id}`);
+        // User disconnected
     });
 };
