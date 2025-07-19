@@ -38,7 +38,35 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [isHost, setIsHost] = useState(false);
+  const [connectionState, setConnectionState] = useState<string>("new");
+  const [iceConnectionState, setIceConnectionState] = useState<string>("new");
+  const [signalingState, setSignalingState] = useState<string>("stable");
   const { toast } = useToast();
+
+  // Helper function to stop all media tracks and cleanup
+  const stopAllMediaTracks = () => {
+    if (localStream) {
+      localStream.getTracks().forEach(track => {
+        track.stop(); // This stops the track and releases the camera/mic
+        console.log('Stopped track:', track.kind);
+      });
+    }
+    
+    // Close peer connection
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
+    }
+    
+    // Clear all streams and states
+    setLocalStream(null);
+    setRemoteStream(null);
+    setRemoteConnected(false);
+    setRemoteMuted(false);
+    setRemoteVideoOn(true);
+    setIsMuted(false);
+    setIsVideoOn(true);
+  };
 
   // Use refs to persist peer connection and streams
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
@@ -87,7 +115,6 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
     socket.emit("join-room", roomId);
 
     socket.on('room-created',(roomId)=>{
-      console.log(`${roomId} registered in Database`);
       setIsHost(true); // First user to create room is the host
       toast({
         title: "Room created",
@@ -97,7 +124,6 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
     });
 
     socket.on('user-joined', (userId) => {
-      console.log(`User ${userId} joined the room`);
       toast({
         title: "User joined",
         description: "Someone joined your video call",
@@ -106,18 +132,49 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
     });
 
     socket.on('call-ended-by-host', () => {
+      // Stop all media tracks and cleanup
+      stopAllMediaTracks();
+      
       toast({
         title: "Call ended",
-        description: "The host ended the call",
+        description: "The host ended the call. Camera and microphone have been disabled.",
         variant: "destructive"
       });
+      
+      // Navigate back to room entry
       onLeaveRoom();
     });
 
     // 1. Get local media
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+    navigator.mediaDevices.getUserMedia({ 
+      video: { 
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        facingMode: 'user'
+      }, 
+      audio: { 
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      } 
+    })
       .then((stream) => {
         if (!isMounted) return;
+        console.log('Local stream obtained:', stream.getTracks().map(t => t.kind));
+        console.log('Video tracks:', stream.getVideoTracks().length);
+        console.log('Audio tracks:', stream.getAudioTracks().length);
+        
+        // Check if we actually have video tracks
+        const videoTracks = stream.getVideoTracks();
+        if (videoTracks.length === 0) {
+          console.warn('No video tracks found in stream');
+          toast({ 
+            title: "Camera not available", 
+            description: "Please check camera permissions", 
+            variant: "destructive" 
+          });
+        }
+        
         setLocalStream(stream);
         toast({
           title: "Camera connected",
@@ -127,19 +184,75 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
         const pc = new RTCPeerConnection({ iceServers });
         peerConnectionRef.current = pc;
         // 3. Add local tracks
-        stream.getTracks().forEach(track => pc.addTrack(track, stream));
+        stream.getTracks().forEach(track => {
+          console.log('Adding track to peer connection:', track.kind);
+          pc.addTrack(track, stream);
+        });
         // 4. ICE candidate handler
         pc.onicecandidate = (event) => {
           if (event.candidate) {
             socket.emit("ice-candidate", { roomId, candidate: event.candidate });
           }
         };
+
+        // Add connection state change logging
+        pc.onconnectionstatechange = () => {
+          console.log('Connection state changed:', pc.connectionState);
+          setConnectionState(pc.connectionState);
+          
+          // Handle disconnection
+          if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+            setRemoteConnected(false);
+            setRemoteStream(null);
+            setRemoteMuted(false);
+            setRemoteVideoOn(true);
+            
+            toast({
+              title: "Connection lost",
+              description: "Lost connection with the other user",
+              variant: "destructive"
+            });
+          }
+        };
+
+        pc.oniceconnectionstatechange = () => {
+          console.log('ICE connection state changed:', pc.iceConnectionState);
+          setIceConnectionState(pc.iceConnectionState);
+          
+          // Handle ICE disconnection
+          if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+            setRemoteConnected(false);
+            setRemoteStream(null);
+            
+            toast({
+              title: "Network connection lost",
+              description: "Lost network connection with the other user",
+              variant: "destructive"
+            });
+          }
+        };
+
+        pc.onsignalingstatechange = () => {
+          console.log('Signaling state changed:', pc.signalingState);
+          setSignalingState(pc.signalingState);
+        };
         // 5. Remote track handler
         const remoteStreamObj = new MediaStream();
         setRemoteStream(remoteStreamObj);
         pc.ontrack = (event) => {
+          console.log('Remote track received:', event.track.kind);
           event.streams[0].getTracks().forEach(track => {
             remoteStreamObj.addTrack(track);
+            
+            // Handle track ended event
+            track.onended = () => {
+              console.log('Remote track ended:', track.kind);
+              if (track.kind === 'video') {
+                setRemoteVideoOn(false);
+              } else if (track.kind === 'audio') {
+                setRemoteMuted(true);
+              }
+            };
           });
           setRemoteConnected(true);
           toast({
@@ -152,7 +265,26 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
         socket.emit("ready-for-call", roomId);
       })
       .catch((err) => {
-        toast({ title: "Camera/Mic error", description: err.message, variant: "destructive" });
+        console.error('getUserMedia error:', err);
+        if (err.name === 'NotAllowedError') {
+          toast({ 
+            title: "Camera/Mic Permission Denied", 
+            description: "Please allow camera and microphone access", 
+            variant: "destructive" 
+          });
+        } else if (err.name === 'NotFoundError') {
+          toast({ 
+            title: "Camera/Mic Not Found", 
+            description: "No camera or microphone detected", 
+            variant: "destructive" 
+          });
+        } else {
+          toast({ 
+            title: "Camera/Mic error", 
+            description: err.message, 
+            variant: "destructive" 
+          });
+        }
       });
 
     // 7. Listen for signaling events
@@ -164,10 +296,16 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
         description: "Setting up connection...",
       });
       const pc = peerConnectionRef.current;
-      if (!pc) return;
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      socket.emit("offer", { roomId, offer });
+      if (!pc) {
+        return;
+      }
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket.emit("offer", { roomId, offer });
+      } catch (error) {
+        // Handle error silently
+      }
     });
 
     socket.on("offer", async ({ offer }) => {
@@ -177,30 +315,44 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
         description: "Connecting to the call...",
       });
       const pc = peerConnectionRef.current;
-      if (!pc) return;
-      await pc.setRemoteDescription(new RTCSessionDescription(offer));
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      socket.emit("answer", { roomId, answer });
+      if (!pc) {
+        return;
+      }
+      try {
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        socket.emit("answer", { roomId, answer });
+      } catch (error) {
+        // Handle error silently
+      }
     });
 
     socket.on("answer", async ({ answer }) => {
       const pc = peerConnectionRef.current;
-      if (!pc) return;
-      await pc.setRemoteDescription(new RTCSessionDescription(answer));
-      toast({
-        title: "Call connected",
-        description: "Video call is now active",
-      });
+      if (!pc) {
+        return;
+      }
+      try {
+        await pc.setRemoteDescription(new RTCSessionDescription(answer));
+        toast({
+          title: "Call connected",
+          description: "Video call is now active",
+        });
+      } catch (error) {
+        // Handle error silently
+      }
     });
 
     socket.on("ice-candidate", async ({ candidate }) => {
       const pc = peerConnectionRef.current;
-      if (!pc) return;
+      if (!pc) {
+        return;
+      }
       try {
         await pc.addIceCandidate(new RTCIceCandidate(candidate));
       } catch (err) {
-        console.error("Error adding received ICE candidate", err);
+        // Handle error silently
       }
     });
 
@@ -223,6 +375,16 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
 
     socket.on("peer-disconnected", () => {
       setRemoteConnected(false);
+      setRemoteStream(null); // Clear the remote stream
+      setRemoteMuted(false); // Reset remote user states
+      setRemoteVideoOn(true);
+      
+      // Close the peer connection
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+        peerConnectionRef.current = null;
+      }
+      
       toast({
         title: "User left",
         description: "The other person left the call",
@@ -244,17 +406,9 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
       socket.off("user-joined");
       socket.off("room-created");
       socket.off("call-ended-by-host");
-      // Cleanup peer connection and streams
-      if (peerConnectionRef.current) {
-        peerConnectionRef.current.close();
-        peerConnectionRef.current = null;
-      }
-      if (localStream) {
-        localStream.getTracks().forEach(track => track.stop()); // Stop camera and mic
-      }
-      setLocalStream(null);
-      setRemoteStream(null);
-      setRemoteConnected(false);
+      
+      // Stop all media tracks and cleanup
+      stopAllMediaTracks();
     };
   }, [roomId]);
 
@@ -269,9 +423,12 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
   const endCallForEveryone = () => {
     if (!isHost) return;
     
+    // Stop all media tracks and cleanup
+    stopAllMediaTracks();
+    
     toast({
       title: "Ending call",
-      description: "Ending the call for everyone",
+      description: "Ending the call for everyone. Camera and microphone have been disabled.",
       variant: "destructive"
     });
     
@@ -283,9 +440,12 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
   };
 
   const handleLeaveRoom = () => {
+    // Stop all media tracks and cleanup
+    stopAllMediaTracks();
+    
     toast({
       title: "Left room",
-      description: "You've left the video call",
+      description: "You've left the video call. Camera and microphone have been disabled.",
       variant: "destructive"
     });
     onLeaveRoom();
@@ -333,6 +493,26 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
     });
   };
 
+  const getConnectionStatus = () => {
+    if (connectionState === "connected") {
+      return { text: "Connected", color: "bg-green-500", pulse: true };
+    } else if (connectionState === "connecting") {
+      return { text: "Connecting...", color: "bg-yellow-500", pulse: true };
+    } else if (iceConnectionState === "checking") {
+      return { text: "Establishing connection...", color: "bg-blue-500", pulse: true };
+    } else if (signalingState === "have-local-offer" || signalingState === "have-remote-offer") {
+      return { text: "Negotiating...", color: "bg-purple-500", pulse: true };
+    } else if (connectionState === "failed" || iceConnectionState === "failed") {
+      return { text: "Connection failed", color: "bg-red-500", pulse: false };
+    } else if (connectionState === "disconnected") {
+      return { text: "Disconnected", color: "bg-gray-500", pulse: false };
+    } else {
+      return { text: "Initializing...", color: "bg-gray-400", pulse: true };
+    }
+  };
+
+  const connectionStatus = getConnectionStatus();
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-gray-800 relative overflow-hidden">
       {/* Header */}
@@ -361,11 +541,11 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
 
           <div className="flex items-center gap-4">
             <Badge 
-              variant={isConnected ? "default" : "secondary"}
-              className={`${isConnected ? "bg-fuchsia-400 shadow-glow" : "bg-gray-700 text-gray-300"} animate-fade-in`}
+              variant={connectionState === "connected" ? "default" : "secondary"}
+              className={`${connectionStatus.color} shadow-glow animate-fade-in`}
             >
-              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-white animate-pulse' : 'bg-gray-500'} mr-2`} />
-              {isConnected ? "Connected" : "Connecting..."}
+              <div className={`w-2 h-2 rounded-full ${connectionStatus.pulse ? 'animate-pulse' : ''} mr-2`} />
+              {connectionStatus.text}
             </Badge>
             
             <Button 
@@ -485,6 +665,39 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
               <p className="text-lg font-medium text-gray-200">
                 {remoteConnected ? "Video call in progress" : "Waiting for others to join..."}
               </p>
+              
+              {/* Connection Status Details */}
+              <div className="flex items-center justify-center gap-4 mt-4 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${
+                    connectionState === "connected" ? "bg-green-500" :
+                    connectionState === "connecting" ? "bg-yellow-500" :
+                    connectionState === "failed" ? "bg-red-500" :
+                    "bg-gray-500"
+                  } ${connectionState === "connecting" ? "animate-pulse" : ""}`} />
+                  <span className="text-gray-300">WebRTC: {connectionState}</span>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${
+                    iceConnectionState === "connected" ? "bg-green-500" :
+                    iceConnectionState === "checking" ? "bg-blue-500" :
+                    iceConnectionState === "failed" ? "bg-red-500" :
+                    "bg-gray-500"
+                  } ${iceConnectionState === "checking" ? "animate-pulse" : ""}`} />
+                  <span className="text-gray-300">ICE: {iceConnectionState}</span>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${
+                    signalingState === "stable" ? "bg-green-500" :
+                    signalingState.includes("offer") ? "bg-purple-500" :
+                    "bg-gray-500"
+                  } ${signalingState.includes("offer") ? "animate-pulse" : ""}`} />
+                  <span className="text-gray-300">Signal: {signalingState}</span>
+                </div>
+              </div>
+              
               {!remoteConnected && (
                 <div className="flex items-center justify-center gap-2 text-sm text-fuchsia-400">
                   <div className="w-2 h-2 rounded-full bg-fuchsia-400 animate-pulse" />
