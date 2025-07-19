@@ -1,20 +1,11 @@
 
 ```markdown
 # Echo Meet - Real-Time Video Communication Platform
-
-<div align="center">
-
-![Echo Meet Logo](https://img.shields.io/badge/Echo%20Meet-Video%20Chat-blue?style=for-the-badge&logo=video)
-![React](https://img.shields.io/badge/React-18.0.0-blue?style=for-the-badge&logo=react)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?style=for-the-badge&logo=typescript)
-![WebRTC](https://img.shields.io/badge/WebRTC-Peer%20to%20Peer-green?style=for-the-badge&logo=webrtc)
-![Socket.io](https://img.shields.io/badge/Socket.io-Real%20Time-orange?style=for-the-badge&logo=socket.io)
-
 **Modern, responsive real-time video communication platform built with React, TypeScript, and WebRTC**
 
-[🚀 Live Demo](#) • [📖 Documentation](#documentation) • [🐛 Report Bug](#reporting-bugs) • [�� Request Feature](#requesting-features)
+[🚀 Live Demo](https://real-time-2-way-communication.vercel.app) • 
 
-</div>
+
 
 ---
 
@@ -111,10 +102,10 @@
 - MongoDB (local or Atlas)
 
 ### 1. Clone the Repository
-```bash
-git clone https://github.com/yourusername/echo-meet.git
-cd echo-meet
-```
+
+[git clone](https://github.com/tech-dhawal-03/Real-Time-2-Way-Communication.git)
+
+
 
 ### 2. Install Dependencies
 ```bash
@@ -123,7 +114,7 @@ cd backend
 npm install
 
 # Install frontend dependencies
-cd ../frontend
+cd /frontend
 npm install
 ```
 
@@ -136,23 +127,22 @@ cp .env.example .env
 
 Edit `.env` file:
 ```env
-PORT=3001
-MONGODB_URI=mongodb://localhost:27017/echo-meet
-CORS_ORIGIN=http://localhost:5173
+PORT
+MONGODB_URI
 ```
 
 ### 4. Start Development Servers
 ```bash
 # Start backend server (from backend directory)
-npm run dev
+nodemon server.js
 
 # Start frontend server (from frontend directory)
 npm run dev
 ```
 
 ### 5. Access the Application
-- Frontend: http://localhost:5173
-- Backend: http://localhost:3001
+- Frontend: http://localhost:8080
+- Backend: http://localhost:3000
 
 ---
 
@@ -195,86 +185,6 @@ echo-meet/
 └── .gitignore
 ```
 
----
-
-## 🔧 Installation
-
-### Backend Setup
-```bash
-cd backend
-
-# Install dependencies
-npm install
-
-# Set up environment variables
-cp .env.example .env
-
-# Start development server
-npm run dev
-```
-
-### Frontend Setup
-```bash
-cd frontend
-
-# Install dependencies
-npm install
-
-# Start development server
-npm run dev
-```
-
-### Database Setup
-```bash
-# Install MongoDB (if not already installed)
-# macOS with Homebrew
-brew install mongodb-community
-
-# Start MongoDB service
-brew services start mongodb-community
-
-# Or use MongoDB Atlas (cloud)
-# Update MONGODB_URI in .env file
-```
-
----
-
-## ⚙️ Configuration
-
-### Environment Variables
-
-#### Backend (.env)
-```env
-PORT=3001
-MONGODB_URI=mongodb://localhost:27017/echo-meet
-CORS_ORIGIN=http://localhost:5173
-NODE_ENV=development
-```
-
-#### Frontend (vite.config.ts)
-```typescript
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    port: 5173,
-    proxy: {
-      '/api': 'http://localhost:3001'
-    }
-  }
-})
-```
-
-### WebRTC Configuration
-```typescript
-// frontend/src/lib/iceServers.js
-export const iceServers = [
-  { urls: 'stun:stun.l.google.com:19302' },
-  { urls: 'stun:stun1.l.google.com:19302' },
-  // Add TURN servers for production
-];
-```
-
----
 
 ## 🎯 Usage
 
@@ -480,48 +390,6 @@ xl: 1280px  /* Extra large devices */
 
 ---
 
-## 🚀 Deployment
-
-### Frontend Deployment (Vercel)
-```bash
-# Install Vercel CLI
-npm i -g vercel
-
-# Deploy to Vercel
-cd frontend
-vercel --prod
-```
-
-### Backend Deployment (Heroku)
-```bash
-# Install Heroku CLI
-# Create Heroku app
-heroku create your-app-name
-
-# Set environment variables
-heroku config:set MONGODB_URI=your-mongodb-uri
-heroku config:set NODE_ENV=production
-
-# Deploy
-git push heroku main
-```
-
-### Environment Variables for Production
-```env
-NODE_ENV=production
-PORT=3001
-MONGODB_URI=your-production-mongodb-uri
-CORS_ORIGIN=https://your-frontend-domain.com
-```
-
-### SSL/HTTPS Setup
-- **Automatic SSL**: Vercel and Heroku provide automatic SSL
-- **Custom Domain**: Configure custom domains with SSL
-- **Security Headers**: Implement security headers
-- **CSP**: Content Security Policy configuration
-
----
-
 ## 🤝 Contributing
 
 We welcome contributions! Please follow these steps:
@@ -589,22 +457,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-## 📞 Support
-
-### Getting Help
-- **Documentation**: Check this README and inline code comments
-- **Issues**: Open an issue on GitHub for bugs or feature requests
-- **Discussions**: Use GitHub Discussions for questions
-- **Email**: Contact us at support@echo-meet.com
-
-### Common Issues
-- **Camera/Microphone Access**: Ensure permissions are granted
-- **Connection Issues**: Check network and firewall settings
-- **Browser Compatibility**: Use supported browsers
-- **Mobile Issues**: Ensure HTTPS for mobile devices
-
----
-
 ## 🔮 Roadmap
 
 ### Upcoming Features
@@ -625,35 +477,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 <div align="center">
-
-**Made with ❤️ by the Echo Meet Team**
-
-[![GitHub stars](https://img.shields.io/github/stars/yourusername/echo-meet?style=social)](https://github.com/yourusername/echo-meet/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/yourusername/echo-meet?style=social)](https://github.com/yourusername/echo-meet/network)
-[![GitHub issues](https://img.shields.io/github/issues/yourusername/echo-meet)](https://github.com/yourusername/echo-meet/issues)
-[![GitHub license](https://img.shields.io/github/license/yourusername/echo-meet)](https://github.com/yourusername/echo-meet/blob/main/LICENSE)
-
-</div>
-```
-
-This comprehensive README.md includes:
-
-1. **Project Overview** with badges and quick links
-2. **Detailed Features** list with categorization
-3. **Complete Tech Stack** breakdown
-4. **Step-by-step Installation** instructions
-5. **Project Structure** visualization
-6. **Configuration** details for all components
-7. **Usage Guide** with screenshots and examples
-8. **Technical Implementation** details
-9. **Design System** documentation
-10. **Security & Privacy** considerations
-11. **Responsive Design** specifications
-12. **Testing** strategies and compatibility
-13. **Performance** metrics and optimizations
-14. **Deployment** instructions for multiple platforms
-15. **Contributing** guidelines
-16. **License** information
-17. **Support** and troubleshooting
-18. **Future Roadmap**
 
