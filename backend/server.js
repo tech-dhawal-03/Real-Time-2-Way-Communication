@@ -17,7 +17,26 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 const PORT = process.env.BACKEND_PORT;
 
-app.use(cors({origin : "http://localhost:8080"}))
+
+const allowedOrigins = [
+    'https://real-time-2-way-communication.vercel.app',
+    'http://localhost:8080'
+]
+
+app.use(cors({
+    origin : function (origin,callback){
+        if(!origin) return callback(null,true);
+        if(allowedOrigins.includes(origin)){
+            return callback(null,true)
+        } else {
+            return callback(new Error('Not allowed ny CORS policy'));
+        }
+    }
+ 
+},
+
+    
+))
 
 //connect to DB
 const connectionDB = await connectToDB();
