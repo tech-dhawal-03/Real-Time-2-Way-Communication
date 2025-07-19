@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import { setupSocket } from './config/socket.js';
 import {createServer} from 'http';
 import cors from 'cors';
+import { connectToDB } from './config/db.js';
 
 
 dotenv.config();
@@ -17,6 +18,10 @@ app.use(express.urlencoded({ extended: true }));
 const PORT = process.env.BACKEND_PORT;
 
 app.use(cors({origin : "http://localhost:8080"}))
+
+//connect to DB
+const connectionDB = await connectToDB();
+console.log(connectionDB);
 
 
 //setting up socket.io

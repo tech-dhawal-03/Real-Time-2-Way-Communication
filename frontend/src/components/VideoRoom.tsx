@@ -14,7 +14,9 @@ import {
   Settings, 
   Copy,
   Users,
-  ArrowLeft
+  ArrowLeft,
+  Volume2,
+  VolumeX
 } from "lucide-react";
 import socket from "@/sockets/socket";
 import { useRef } from "react";
@@ -28,15 +30,55 @@ interface VideoRoomProps {
 export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [isVideoOn, setIsVideoOn] = useState(false);
+  const [isVideoOn, setIsVideoOn] = useState(true);
   const [remoteConnected, setRemoteConnected] = useState(false);
+  const [remoteMuted, setRemoteMuted] = useState(false);
+  const [remoteVideoOn, setRemoteVideoOn] = useState(true);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [isHost, setIsHost] = useState(false);
   const { toast } = useToast();
 
   // Use refs to persist peer connection and streams
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const isOffererRef = useRef(false);
+  
+  // Audio refs for notification sounds
+  const userJoinedSoundRef = useRef<HTMLAudioElement | null>(null);
+  const remoteJoinedSoundRef = useRef<HTMLAudioElement | null>(null);
+
+  // Initialize audio elements
+  useEffect(() => {
+    userJoinedSoundRef.current = new Audio('/sounds/user-joined.mp3');
+    remoteJoinedSoundRef.current = new Audio('/sounds/remote-joined.mp3');
+    
+    // Preload audio files
+    userJoinedSoundRef.current.load();
+    remoteJoinedSoundRef.current.load();
+  }, []);
+
+  const playUserJoinedSound = () => {
+    if (userJoinedSoundRef.current && soundEnabled) {
+      userJoinedSoundRef.current.currentTime = 0;
+      userJoinedSoundRef.current.play().catch(console.error);
+    }
+  };
+
+  const playRemoteJoinedSound = () => {
+    if (remoteJoinedSoundRef.current && soundEnabled) {
+      remoteJoinedSoundRef.current.currentTime = 0;
+      remoteJoinedSoundRef.current.play().catch(console.error);
+    }
+  };
+
+  const toggleSound = () => {
+    setSoundEnabled(!soundEnabled);
+    toast({
+      title: soundEnabled ? "Sounds disabled" : "Sounds enabled",
+      description: soundEnabled ? "Notification sounds are now off" : "Notification sounds are now on",
+    });
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -44,11 +86,43 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
     socket.connect();
     socket.emit("join-room", roomId);
 
+    socket.on('room-created',(roomId)=>{
+      console.log(`${roomId} registered in Database`);
+      setIsHost(true); // First user to create room is the host
+      toast({
+        title: "Room created",
+        description: "Your video room is ready! You are the host.",
+      });
+      playUserJoinedSound(); // Play sound when room is created
+    });
+
+    socket.on('user-joined', (userId) => {
+      console.log(`User ${userId} joined the room`);
+      toast({
+        title: "User joined",
+        description: "Someone joined your video call",
+      });
+      playRemoteJoinedSound(); // Play sound when remote user joins
+    });
+
+    socket.on('call-ended-by-host', () => {
+      toast({
+        title: "Call ended",
+        description: "The host ended the call",
+        variant: "destructive"
+      });
+      onLeaveRoom();
+    });
+
     // 1. Get local media
     navigator.mediaDevices.getUserMedia({ video: true, audio: true })
       .then((stream) => {
         if (!isMounted) return;
         setLocalStream(stream);
+        toast({
+          title: "Camera connected",
+          description: "Your camera and microphone are ready",
+        });
         // 2. Create peer connection
         const pc = new RTCPeerConnection({ iceServers });
         peerConnectionRef.current = pc;
@@ -68,6 +142,11 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
             remoteStreamObj.addTrack(track);
           });
           setRemoteConnected(true);
+          toast({
+            title: "Connected!",
+            description: "Video call is now active",
+          });
+          playRemoteJoinedSound(); // Play sound when remote stream is received
         };
         // 6. Join logic: ask server if offerer
         socket.emit("ready-for-call", roomId);
@@ -80,6 +159,10 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
     socket.on("init-offer", async () => {
       // You are the offerer
       isOffererRef.current = true;
+      toast({
+        title: "Initiating call",
+        description: "Setting up connection...",
+      });
       const pc = peerConnectionRef.current;
       if (!pc) return;
       const offer = await pc.createOffer();
@@ -89,6 +172,10 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
 
     socket.on("offer", async ({ offer }) => {
       // You are the answerer
+      toast({
+        title: "Incoming call",
+        description: "Connecting to the call...",
+      });
       const pc = peerConnectionRef.current;
       if (!pc) return;
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
@@ -101,6 +188,10 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
       const pc = peerConnectionRef.current;
       if (!pc) return;
       await pc.setRemoteDescription(new RTCSessionDescription(answer));
+      toast({
+        title: "Call connected",
+        description: "Video call is now active",
+      });
     });
 
     socket.on("ice-candidate", async ({ candidate }) => {
@@ -113,6 +204,32 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
       }
     });
 
+    // Listen for remote user state changes
+    socket.on("remote-mute-toggle", ({ muted }) => {
+      setRemoteMuted(muted);
+      toast({
+        title: muted ? "Remote user muted" : "Remote user unmuted",
+        description: muted ? "The other person muted their microphone" : "The other person unmuted their microphone",
+      });
+    });
+
+    socket.on("remote-video-toggle", ({ videoOn }) => {
+      setRemoteVideoOn(videoOn);
+      toast({
+        title: videoOn ? "Remote video on" : "Remote video off",
+        description: videoOn ? "The other person turned on their camera" : "The other person turned off their camera",
+      });
+    });
+
+    socket.on("peer-disconnected", () => {
+      setRemoteConnected(false);
+      toast({
+        title: "User left",
+        description: "The other person left the call",
+        variant: "destructive"
+      });
+    });
+
     return () => {
       isMounted = false;
       socket.emit("leave-room", roomId);
@@ -121,6 +238,12 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
       socket.off("offer");
       socket.off("answer");
       socket.off("ice-candidate");
+      socket.off("remote-mute-toggle");
+      socket.off("remote-video-toggle");
+      socket.off("peer-disconnected");
+      socket.off("user-joined");
+      socket.off("room-created");
+      socket.off("call-ended-by-host");
       // Cleanup peer connection and streams
       if (peerConnectionRef.current) {
         peerConnectionRef.current.close();
@@ -143,6 +266,22 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
     });
   };
 
+  const endCallForEveryone = () => {
+    if (!isHost) return;
+    
+    toast({
+      title: "Ending call",
+      description: "Ending the call for everyone",
+      variant: "destructive"
+    });
+    
+    // Notify all users that call is ended
+    socket.emit("end-call", { roomId });
+    
+    // Leave room locally
+    onLeaveRoom();
+  };
+
   const handleLeaveRoom = () => {
     toast({
       title: "Left room",
@@ -150,6 +289,48 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
       variant: "destructive"
     });
     onLeaveRoom();
+  };
+
+  const toggleMute = () => {
+    const newMutedState = !isMuted;
+    setIsMuted(newMutedState);
+    
+    // Update local stream audio track
+    if (localStream) {
+      const audioTrack = localStream.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !newMutedState;
+      }
+    }
+    
+    // Notify remote user
+    socket.emit("remote-mute-toggle", { roomId, muted: newMutedState });
+    
+    toast({
+      title: newMutedState ? "Microphone muted" : "Microphone unmuted",
+      description: newMutedState ? "Your microphone is now off" : "Your microphone is now on",
+    });
+  };
+
+  const toggleVideo = () => {
+    const newVideoState = !isVideoOn;
+    setIsVideoOn(newVideoState);
+    
+    // Update local stream video track
+    if (localStream) {
+      const videoTrack = localStream.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.enabled = newVideoState;
+      }
+    }
+    
+    // Notify remote user
+    socket.emit("remote-video-toggle", { roomId, videoOn: newVideoState });
+    
+    toast({
+      title: newVideoState ? "Camera on" : "Camera off",
+      description: newVideoState ? "Your camera is now on" : "Your camera is now off",
+    });
   };
 
   return (
@@ -172,7 +353,7 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
                 <Video className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h1 className="font-bold text-lg text-white">Video Room</h1>
+                <h1 className="font-bold text-lg text-white">Echo Meet Room</h1>
                 <p className="text-sm text-gray-300">Room: <span className="font-mono font-semibold text-fuchsia-400">{roomId}</span></p>
               </div>
             </div>
@@ -241,8 +422,8 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
               isLocal={false}
               isConnected={remoteConnected}
               userName={remoteConnected ? "Guest User" : "Waiting..."}
-              isMuted={false}
-              isVideoOn={remoteConnected}
+              isMuted={remoteMuted}
+              isVideoOn={remoteVideoOn}
               className="animate-slide-up shadow-premium"
               style={{ animationDelay: '0.3s' }}
               mediaStream={remoteStream}
@@ -258,7 +439,7 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
               <Button
                 variant={isMuted ? "destructive" : "glass"}
                 size="lg"
-                onClick={() => setIsMuted(!isMuted)}
+                onClick={toggleMute}
                 className="w-16 h-16 rounded-2xl shadow-soft hover-glow text-white"
               >
                 {isMuted ? <MicOff className="w-7 h-7" /> : <Mic className="w-7 h-7" />}
@@ -267,7 +448,7 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
               <Button
                 variant={isVideoOn ? "glass" : "destructive"}
                 size="lg"
-                onClick={() => setIsVideoOn(!isVideoOn)}
+                onClick={toggleVideo}
                 className="w-16 h-16 rounded-2xl shadow-soft hover-glow text-white"
               >
                 {isVideoOn ? <Video className="w-7 h-7" /> : <VideoOff className="w-7 h-7" />}
@@ -279,6 +460,15 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
                 className="w-16 h-16 rounded-2xl shadow-soft hover-glow text-white"
               >
                 <Settings className="w-7 h-7" />
+              </Button>
+
+              <Button
+                variant={soundEnabled ? "glass" : "destructive"}
+                size="lg"
+                onClick={toggleSound}
+                className="w-16 h-16 rounded-2xl shadow-soft hover-glow text-white"
+              >
+                {soundEnabled ? <Volume2 className="w-7 h-7" /> : <VolumeX className="w-7 h-7" />}
               </Button>
 
               <Button
@@ -299,6 +489,18 @@ export const VideoRoom = ({ roomId, onLeaveRoom }: VideoRoomProps) => {
                 <div className="flex items-center justify-center gap-2 text-sm text-fuchsia-400">
                   <div className="w-2 h-2 rounded-full bg-fuchsia-400 animate-pulse" />
                   <span>Share the room ID to invite others</span>
+                </div>
+              )}
+              {isHost && (
+                <div className="mt-4">
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={endCallForEveryone}
+                    className="bg-red-600 hover:bg-red-700 text-white"
+                  >
+                    End Call for Everyone
+                  </Button>
                 </div>
               )}
             </div>
